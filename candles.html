@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master Candlestick Analyzer & Pattern Library (Dynamic Scale)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+        .glass-panel { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 3px; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Top Header Navigation -->
+    <header class="glass-panel border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div class="flex items-center space-x-3">
+            <div class="bg-gradient-to-tr from-emerald-500 to-cyan-500 p-2.5 rounded-xl shadow-lg shadow-emerald-500/20">
+                <i class="fa-solid fa-chart-candlestick text-white text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+                    CandleMaster <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">₹ INR</span>
+                </h1>
+                <p class="text-xs text-slate-400">Interactive Candlestick Analyzer</p>
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button onclick="openEditModal()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-emerald-600/30 transition flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square"></i> Custom OCHL (₹)
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 p-6 grid grid-cols-1 xl:grid-cols-4 gap-6 max-w-[1800px] w-full mx-auto">
+        
+        <!-- COLUMN 1: Pattern Library -->
+        <div class="xl:col-span-1 flex flex-col space-y-4">
+            <div class="glass-panel rounded-2xl p-5 shadow-2xl flex flex-col h-[760px]">
+                <div class="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                    <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                        <i class="fa-solid fa-book-open text-emerald-400"></i> Candlestick Library
+                    </h2>
+                    <span class="text-xs text-slate-400 font-mono" id="libraryCount">0 patterns</span>
+                </div>
+                <p class="text-xs text-slate-400 mb-3">Click any pattern to load it into the main analyzer:</p>
+
+                <!-- Search Input -->
+                <div class="relative mb-3">
+                    <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-500 text-xs"></i>
+                    <input type="text" id="patternSearch" oninput="filterPatterns()" placeholder="Search pattern name..." class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <!-- Pattern Buttons List -->
+                <div id="patternListContainer" class="flex-1 overflow-y-auto pr-1 space-y-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 2 (Center): Active Model Display & Centered Canvas Chart -->
+        <div class="xl:col-span-2 flex flex-col space-y-6">
+            <div class="glass-panel rounded-2xl p-6 shadow-2xl flex flex-col relative overflow-hidden h-[760px]">
+                <div class="flex items-center justify-between pb-4 border-b border-slate-800 mb-4">
+                    <div>
+                        <div class="text-xs text-slate-400 uppercase tracking-wider font-semibold">Active Model & Recognition</div>
+                        <div id="activePatternNameHeader" class="text-lg font-bold text-white">Loading Pattern...</div>
+                    </div>
+                    <div id="badgeStatus" class="px-3 py-1 text-xs font-semibold rounded-full border">Ready</div>
+                </div>
+
+                <!-- Helper Tip -->
+                <div class="bg-indigo-950/40 border border-indigo-500/30 rounded-xl p-3 mb-4 text-xs text-indigo-200 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-indigo-400 text-base"></i>
+                    <span><strong>Tip:</strong> Drag wick tips or body edges freely. The chart automatically rescales whether values are tiny (e.g. 5, 8.5) or large (e.g. 21500)!</span>
+                </div>
+
+                <!-- Chart Wrapper -->
+                <div class="relative w-full flex-1 flex items-center justify-center">
+                    <canvas id="singleCandleChart"></canvas>
+                </div>
+
+                <!-- Quick Stats Footer -->
+                <div class="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-800 text-center font-mono text-xs">
+                    <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-slate-500 uppercase">Open</div>
+                        <div id="statOpen" class="text-white font-bold mt-0.5">₹0</div>
+                    </div>
+                    <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-emerald-500 uppercase">High</div>
+                        <div id="statHigh" class="text-emerald-400 font-bold mt-0.5">₹0</div>
+                    </div>
+                    <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-rose-500 uppercase">Low</div>
+                        <div id="statLow" class="text-rose-400 font-bold mt-0.5">₹0</div>
+                    </div>
+                    <div class="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                        <div class="text-slate-500 uppercase">Close</div>
+                        <div id="statClose" class="text-white font-bold mt-0.5">₹0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- COLUMN 3 (Right): Deep Analysis & Risk Breakdown -->
+        <div class="xl:col-span-1 flex flex-col space-y-6">
+            <div class="glass-panel rounded-2xl p-6 shadow-2xl flex flex-col h-[760px] border-t-4 border-t-emerald-500">
+                <div class="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
+                    <h2 class="text-base font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-brain text-emerald-400"></i> Deep Analysis
+                    </h2>
+                    <span class="text-xs text-slate-400 font-mono">Rupees ₹</span>
+                </div>
+
+                <!-- Analysis Content Box -->
+                <div id="analysisContent" class="flex-1 flex flex-col space-y-4 overflow-y-auto pr-1 text-sm">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Custom OCHL Entry -->
+    <div id="editModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <h3 class="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-pen-to-square text-emerald-400"></i> Set Exact Values (₹)
+            </h3>
+            <p class="text-xs text-slate-400 mb-6">Enter any values (small like 5, 8.5 or large like 21500). Scale adjusts automatically.</p>
+            
+            <form onsubmit="saveModalData(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Open Price (₹)</label>
+                    <input type="number" step="any" id="modalOpen" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">High Price (₹) <span class="text-xs text-slate-500">(Must be ≥ Open, Close, Low)</span></label>
+                    <input type="number" step="any" id="modalHigh" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Low Price (₹) <span class="text-xs text-slate-500">(Must be ≤ Open, Close, High)</span></label>
+                    <input type="number" step="any" id="modalLow" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" required>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-300 mb-1">Close Price (₹)</label>
+                    <input type="number" step="any" id="modalClose" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-emerald-500 font-mono" required>
+                </div>
+
+                <div class="flex items-center justify-end space-x-3 pt-4 border-t border-slate-800">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg transition">Cancel</button>
+                    <button type="submit" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg shadow-lg shadow-emerald-600/30 transition">Apply Prices</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Candlestick Library Database
+        const candlestickLibrary = [
+            {
+                id: 'hammer',
+                name: 'Hammer',
+                category: 'Bullish Reversal',
+                open: 21500, high: 21530, low: 21100, close: 21480,
+                description: 'Small body near the top of the session with a long lower wick (at least 2x body size). Shows intense selling pressure met by aggressive institutional buying.',
+                pros: ['High reliability at key support levels', 'Clear rejection of lower prices'],
+                cons: ['Requires confirmation on the next candle', 'Unreliable in ranging sideways markets'],
+                risks: 'If the low is breached on subsequent sessions, the bullish thesis is invalidated, risking rapid downside.'
+            },
+            {
+                id: 'shooting_star',
+                name: 'Shooting Star',
+                category: 'Bearish Reversal',
+                open: 21300, high: 21800, low: 21280, close: 21350,
+                description: 'Small real body near the session low with a long upper wick (at least 2x body size). Buyers rallied hard intraday but sellers completely overpowered them by close.',
+                pros: ['Classic warning sign at market tops and resistance zones', 'Clear seller dominance overhead'],
+                cons: ['Can be a false rejection in aggressive bull runs', 'Requires red candle confirmation'],
+                risks: 'Short sellers entering too aggressively risk getting caught in a short squeeze if the high is breached.'
+            },
+            {
+                id: 'inverted_hammer',
+                name: 'Inverted Hammer',
+                category: 'Bullish Reversal',
+                open: 21200, high: 21650, low: 21180, close: 21280,
+                description: 'Small body near the bottom with a long upper wick. Buyers attempted a breakout but faced overhead resistance before closing near the open.',
+                pros: ['Suggests accumulation by buyers at lows', 'Potential precursor to a trend reversal'],
+                cons: ['Weaker signal than regular hammer', 'Needs strong green confirmation candle'],
+                risks: 'Sellers may defend resistance levels, leading to continuation of the prior downtrend.'
+            },
+            {
+                id: 'hanging_man',
+                name: 'Hanging Man',
+                category: 'Bearish Reversal',
+                open: 21700, high: 21750, low: 21250, close: 21300,
+                description: 'Small body at the top with a long lower wick during an uptrend. Indicates early warning that sellers are starting to test buyer resolve.',
+                pros: ['Highlights distribution phase at top of rallies'],
+                cons: ['Often mistaken for a hammer; context is critical'],
+                risks: 'Trading without a confirming red session can lead to premature short positions.'
+            },
+            {
+                id: 'bullish_marubozu',
+                name: 'Bullish Marubozu',
+                category: 'Bullish Continuation',
+                open: 21100, high: 21700, low: 21100, close: 21700,
+                description: 'A long green body with zero upper or lower wicks. Buyers controlled price action every single second from open to close.',
+                pros: ['Unambiguous buyer dominance and capital inflow', 'Strong trend continuation probability'],
+                cons: ['Chasing prices at the very top carries poor risk-to-reward ratio'],
+                risks: 'Exhaustion risk; overextended rallies can face swift intraday profit-booking pullbacks.'
+            },
+            {
+                id: 'bearish_marubozu',
+                name: 'Bearish Marubozu',
+                category: 'Bearish Continuation',
+                open: 21700, high: 21700, low: 21100, close: 21100,
+                description: 'A long red body with zero wicks. Sellers controlled the entire session from opening bell to close without any meaningful bounce.',
+                pros: ['Clear confirmation of heavy institutional distribution and selling pressure', 'Great for short strategies'],
+                cons: ['Selling after a massive plunge risks entering near temporary support floors'],
+                risks: 'Oversold bounce risk; steep drops often trigger sudden short-covering relief rallies.'
+            },
+            {
+                id: 'dragonfly_doji',
+                name: 'Dragonfly Doji',
+                category: 'Bullish Reversal',
+                open: 21500, high: 21500, low: 21050, close: 21500,
+                description: 'Open, High, and Close are identical at the absolute peak, with a long lower wick. Bears smashed prices down, but bulls completely wiped out the losses by close.',
+                pros: ['Extremely powerful rejection of lows', 'Clear structural support floor established'],
+                cons: ['Rare exact match; needs validation'],
+                risks: 'False recovery traps can occur if volume is thin.'
+            },
+            {
+                id: 'gravestone_doji',
+                name: 'Gravestone Doji',
+                category: 'Bearish Reversal',
+                open: 21300, high: 21850, low: 21300, close: 21300,
+                description: 'Open, Low, and Close are identical at the session low, with a long upper wick. Bulls rallied prices to highs, but sellers aggressively erased all gains.',
+                pros: ['Definitive resistance ceiling indicator', 'High reversal accuracy near key supply zones'],
+                cons: ['Requires strict risk management stop-losses above the wick tip'],
+                risks: 'Aggressive traders shorting too early can face sharp volatility spikes.'
+            },
+            {
+                id: 'standard_doji',
+                name: 'Standard Doji',
+                category: 'Indecision',
+                open: 21500, high: 21700, low: 21300, close: 21500,
+                description: 'Open and Close are equal with balanced upper and lower wicks. Absolute equilibrium between buyers and sellers.',
+                pros: ['Signals major trend exhaustion', 'Precedes powerful breakout moves'],
+                cons: ['Zero directional bias on its own'],
+                risks: 'High whipsaw risk in sideways choppy markets.'
+            },
+            {
+                id: 'spinning_top',
+                name: 'Spinning Top',
+                category: 'Indecision',
+                open: 21500, high: 21750, low: 21250, close: 21520,
+                description: 'Small real body centered between equal upper and lower wicks. Neither bulls nor bears could gain decisive upper hand.',
+                pros: ['Reflects orderly consolidation'],
+                cons: ['Lacks predictive strength without trend context'],
+                risks: 'False breakouts if traded blindly.'
+            }
+        ];
+
+        // Active state object
+        let activeCandle = { ...candlestickLibrary[0] };
+        let chart = null;
+
+        // Custom Candlestick Chart Plugin with Centered Candle Rendering
+        const candlestickPlugin = {
+            id: 'candlestickPlugin',
+            afterDraw(chartInstance) {
+                const { ctx, chartArea: { top, bottom, left, right }, scales: { x, y } } = chartInstance;
+                ctx.save();
+
+                const xCoord = x.getPixelForValue('Active Session');
+                if (xCoord === undefined || isNaN(xCoord)) {
+                    ctx.restore();
+                    return;
+                }
+
+                const isGreen = activeCandle.close >= activeCandle.open;
+                const color = isGreen ? '#10b981' : '#f43f5e'; // Emerald Green vs Rose Red
+
+                const highY = y.getPixelForValue(activeCandle.high);
+                const lowY = y.getPixelForValue(activeCandle.low);
+                const openY = y.getPixelForValue(activeCandle.open);
+                const closeY = y.getPixelForValue(activeCandle.close);
+
+                // 1. Draw High-Low Wick Line
+                ctx.beginPath();
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.moveTo(xCoord, highY);
+                ctx.lineTo(xCoord, lowY);
+                ctx.stroke();
+
+                // Wick draggable handle rings
+                ctx.fillStyle = '#38bdf8';
+                ctx.beginPath(); ctx.arc(xCoord, highY, 5, 0, 2 * Math.PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(xCoord, lowY, 5, 0, 2 * Math.PI); ctx.fill();
+
+                // 2. Draw Open-Close Body Box
+                const bodyTop = Math.min(openY, closeY);
+                const bodyBottom = Math.max(openY, closeY);
+                const bodyHeight = Math.max(Math.abs(closeY - openY), 6);
+                const bodyWidth = 64;
+
+                ctx.fillStyle = color;
+                ctx.fillRect(xCoord - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+
+                // Body border
+                ctx.strokeStyle = '#ffffff33';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(xCoord - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
+
+                // Body edge handles
+                ctx.fillStyle = '#38bdf8';
+                ctx.fillRect(xCoord - bodyWidth / 2 - 4, bodyTop - 3, bodyWidth + 8, 4);
+                ctx.fillRect(xCoord - bodyWidth / 2 - 4, bodyBottom - 1, bodyWidth + 8, 4);
+
+                ctx.restore();
+            }
+        };
+
+        function initApp() {
+            renderPatternList(candlestickLibrary);
+            initChart();
+            updateAll();
+        }
+
+        function renderPatternList(list) {
+            const container = document.getElementById('patternListContainer');
+            container.innerHTML = '';
+            document.getElementById('libraryCount').innerText = list.length + ' patterns';
+
+            list.forEach(p => {
+                const isGreen = p.close >= p.open;
+                const btn = document.createElement('button');
+                btn.className = `w-full text-left p-3 rounded-xl border transition flex items-center justify-between group ${activeCandle.name === p.name ? 'bg-slate-800 border-emerald-500 shadow-lg shadow-emerald-500/10' : 'bg-slate-900/60 border-slate-800 hover:bg-slate-800/80'}`;
+                
+                btn.onclick = () => loadPattern(p.id);
+
+                btn.innerHTML = `
+                    <div>
+                        <div class="text-xs font-bold text-white group-hover:text-emerald-400 transition">${p.name}</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">${p.category}</div>
+                    </div>
+                    <span class="px-2 py-0.5 text-[10px] font-semibold rounded ${isGreen ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}">
+                        ${isGreen ? 'Bullish' : 'Bearish'}
+                    </span>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function filterPatterns() {
+            const query = document.getElementById('patternSearch').value.toLowerCase();
+            const filtered = candlestickLibrary.filter(p => p.name.toLowerCase().includes(query) || p.category.toLowerCase().includes(query));
+            renderPatternList(filtered);
+        }
+
+        function loadPattern(id) {
+            const found = candlestickLibrary.find(p => p.id === id);
+            if (found) {
+                activeCandle = { ...found };
+                renderPatternList(candlestickLibrary);
+                updateAll();
+            }
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('singleCandleChart').getContext('2d');
+            
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: ['Active Session'],
+                    datasets: [{
+                        data: [0],
+                        borderColor: 'transparent',
+                        backgroundColor: 'transparent',
+                        pointRadius: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: { color: '#94a3b8', font: { size: 13, weight: 'bold' } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.05)' },
+                            ticks: {
+                                color: '#94a3b8',
+                                callback: function(value) {
+                                    // Format decimal dynamically based on value scale magnitude
+                                    if (Math.abs(value) < 10) return '₹' + value.toFixed(2);
+                                    return '₹' + value.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: { enabled: false }
+                    }
+                },
+                plugins: [candlestickPlugin]
+            });
+
+            setupInteractivity();
+        }
+
+        // Fully Flexible Centered Drag & Drop Interactivity
+        function setupInteractivity() {
+            const canvas = document.getElementById('singleCandleChart');
+            let isDragging = false;
+            let dragTarget = null; // 'high', 'low', 'open', 'close'
+
+            canvas.addEventListener('mousedown', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = e.clientX - rect.left;
+                const mouseY = e.clientY - rect.top;
+
+                const xMap = chart.scales.x;
+                const yMap = chart.scales.y;
+                const xCoord = xMap.getPixelForValue('Active Session');
+
+                if (Math.abs(mouseX - xCoord) < 55) {
+                    const highY = yMap.getPixelForValue(activeCandle.high);
+                    const lowY = yMap.getPixelForValue(activeCandle.low);
+                    const openY = yMap.getPixelForValue(activeCandle.open);
+                    const closeY = yMap.getPixelForValue(activeCandle.close);
+                    const bodyTop = Math.min(openY, closeY);
+                    const bodyBottom = Math.max(openY, closeY);
+
+                    if (Math.abs(mouseY - highY) < 16) {
+                        isDragging = true;
+                        dragTarget = 'high';
+                    } else if (Math.abs(mouseY - lowY) < 16) {
+                        isDragging = true;
+                        dragTarget = 'low';
+                    } else if (Math.abs(mouseY - bodyTop) < 12) {
+                        dragTarget = (openY <= closeY) ? 'open' : 'close';
+                    } else if (Math.abs(mouseY - bodyBottom) < 12) {
+                        dragTarget = (openY > closeY) ? 'open' : 'close';
+                    }
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging || !dragTarget) return;
+                const rect = canvas.getBoundingClientRect();
+                const mouseY = e.clientY - rect.top;
+                const yMap = chart.scales.y;
+                let rawVal = yMap.getValueForPixel(mouseY);
+
+                // Preserve precision for very small scales (< 10) or round integers for large scales
+                let currentVal = Math.abs(activeCandle.high) < 20 ? Number(rawVal.toFixed(2)) : Math.round(rawVal);
+
+                if (dragTarget === 'high') {
+                    if (currentVal >= Math.max(activeCandle.low, activeCandle.open, activeCandle.close)) {
+                        activeCandle.high = currentVal;
+                    }
+                } else if (dragTarget === 'low') {
+                    if (currentVal <= Math.min(activeCandle.high, activeCandle.open, activeCandle.close)) {
+                        activeCandle.low = currentVal;
+                    }
+                } else if (dragTarget === 'open') {
+                    if (currentVal <= activeCandle.high && currentVal >= activeCandle.low) {
+                        activeCandle.open = currentVal;
+                    }
+                } else if (dragTarget === 'close') {
+                    if (currentVal <= activeCandle.high && currentVal >= activeCandle.low) {
+                        activeCandle.close = currentVal;
+                    }
+                }
+
+                evaluateCandleRecognition();
+                updateAll();
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDragging = false;
+                dragTarget = null;
+            });
+        }
+
+        // Real-Time Dynamic Name Recognition Engine
+        function evaluateCandleRecognition() {
+            const open = activeCandle.open;
+            const close = activeCandle.close;
+            const high = activeCandle.high;
+            const low = activeCandle.low;
+
+            const bodySize = Math.abs(close - open);
+            const totalRange = Math.max(0.0001, high - low);
+            const upperWick = high - Math.max(open, close);
+            const lowerWick = Math.min(open, close) - low;
+            const isGreen = close >= open;
+
+            let detectedName = "";
+            let category = "";
+            let description = "";
+            let pros = [];
+            let cons = [];
+            let risks = "";
+
+            if (upperWick <= totalRange * 0.03 && lowerWick <= totalRange * 0.03 && bodySize >= totalRange * 0.9) {
+                if (isGreen) {
+                    detectedName = "Bullish Marubozu";
+                    category = "Bullish Continuation";
+                    description = "A powerful green candlestick with almost zero wicks. Buyers commanded absolute control from open to close.";
+                    pros = ["Unambiguous institutional buying pressure", "Strong continuation signal"];
+                    cons = ["Chasing near the absolute high carries correction risk"];
+                    risks = "Overextended momentum can experience sharp profit-booking pullbacks.";
+                } else {
+                    detectedName = "Bearish Marubozu";
+                    category = "Bearish Continuation";
+                    description = "A powerful red candlestick with almost zero wicks. Sellers dominated every fraction of the session.";
+                    pros = ["Clear confirmation of heavy selling", "Strong bearish momentum"];
+                    cons = ["Selling after an extensive drop risks bottom-tick trap"];
+                    risks = "Oversold bounce risk; sharp drops frequently trigger sudden short-covering rallies.";
+                }
+            } else if (bodySize <= totalRange * 0.05) {
+                if (lowerWick >= totalRange * 0.6 && upperWick <= totalRange * 0.1) {
+                    detectedName = "Dragonfly Doji";
+                    category = "Bullish Reversal";
+                    description = "Open, High, and Close meet near the session high with an extensive lower wick, showing strong rejection of lower prices.";
+                    pros = ["Powerful rejection of lower support prices", "Clear reversal signal at support"];
+                    cons = ["Requires immediate confirmation"];
+                    risks = "False recoveries can occur if overall market volume is weak.";
+                } else if (upperWick >= totalRange * 0.6 && lowerWick <= totalRange * 0.1) {
+                    detectedName = "Gravestone Doji";
+                    category = "Bearish Reversal";
+                    description = "Open, Low, and Close meet near the session low with an extensive upper wick, showing intense rejection of higher prices.";
+                    pros = ["Definitive overhead resistance indicator", "High reversal accuracy at tops"];
+                    cons = ["Strict stop-loss required above the wick tip"];
+                    risks = "Aggressive shorting too early can get caught in volatility squeezes.";
+                } else if (upperWick >= totalRange * 0.35 && lowerWick >= totalRange * 0.35) {
+                    detectedName = "Long-Legged Doji";
+                    category = "High Volatility Indecision";
+                    description = "Long upper and lower wicks with Open and Close meeting in the middle. Shows intense market tug-of-war.";
+                    pros = ["Signals major trend exhaustion or news digestion"];
+                    cons = ["Zero directional bias on its own"];
+                    risks = "High whipsaw risk in choppy sideways price action.";
+                } else {
+                    detectedName = "Standard Doji";
+                    category = "Indecision";
+                    description = "Open and Close are virtually identical with balanced wicks, indicating equilibrium between bulls and bears.";
+                    pros = ["Precedes volatile breakout moves"];
+                    cons = ["Requires follow-up confirmation candle"];
+                    risks = "Direction is completely neutral until broken.";
+                }
+            } else {
+                if (lowerWick >= bodySize * 2 && upperWick <= bodySize * 0.5) {
+                    if (isGreen) {
+                        detectedName = "Hammer";
+                        category = "Bullish Reversal";
+                        description = "Small green body near the top with a long lower wick (2x+ body size). Heavy selling was aggressively bought up.";
+                        pros = ["High reliability at key support levels", "Clear institutional accumulation"];
+                        cons = ["Needs confirmation candle"];
+                        risks = "If session low is breached, bullish thesis is invalidated.";
+                    } else {
+                        detectedName = "Hanging Man";
+                        category = "Bearish Reversal";
+                        description = "Small red body near the top with a long lower wick during an uptrend, warning of buyer exhaustion.";
+                        pros = ["Highlights distribution phase at top of rallies"];
+                        cons = ["Often confused with hammer; context is vital"];
+                        risks = "Trading without red confirmation can lead to premature shorting.";
+                    }
+                } else if (upperWick >= bodySize * 2 && lowerWick <= bodySize * 0.5) {
+                    if (!isGreen) {
+                        detectedName = "Shooting Star";
+                        category = "Bearish Reversal";
+                        description = "Small red body near the bottom with a long upper wick (2x+ body size). Intraday rally was completely rejected by sellers.";
+                        pros = ["Classic top reversal warning sign", "Strong overhead supply indicator"];
+                        cons = ["Can be a false rejection in strong bull runs"];
+                        risks = "Short sellers risk getting squeezed if the upper wick high is broken.";
+                    } else {
+                        detectedName = "Inverted Hammer";
+                        category = "Bullish Reversal";
+                        description = "Small green body near the bottom with a long upper wick. Buyers tested overhead supply during a downtrend.";
+                        pros = ["Suggests accumulation at lows"];
+                        cons = ["Weaker signal than regular hammer"];
+                        risks = "Sellers may continue defending resistance levels.";
+                    }
+                } else {
+                    if (isGreen) {
+                        detectedName = "Bullish Candle (" + Math.round((bodySize/totalRange)*100) + "% Body)";
+                        category = "Bullish Trend";
+                        description = "Standard bullish candlestick showing steady buying interest throughout the session.";
+                        pros = ["Supports steady upward momentum"];
+                        cons = ["Moderate conviction without volume context"];
+                        risks = "Standard market risk.";
+                    } else {
+                        detectedName = "Bearish Candle (" + Math.round((bodySize/totalRange)*100) + "% Body)";
+                        category = "Bearish Trend";
+                        description = "Standard bearish candlestick showing steady selling pressure throughout the session.";
+                        pros = ["Supports steady downward momentum"];
+                        cons = ["Moderate conviction without volume context"];
+                        risks = "Standard market risk.";
+                    }
+                }
+            }
+
+            activeCandle.name = detectedName;
+            activeCandle.category = category;
+            activeCandle.description = description;
+            activeCandle.pros = pros.length ? pros : ["Reflects active market participation", "Clear structural price bounds"];
+            activeCandle.cons = cons.length ? cons : ["Requires contextual trend analysis"];
+            activeCandle.risks = risks || "Ensure proper risk-reward ratio and stop-loss placement based on session support/resistance levels.";
+        }
+
+        function updateAnalysis() {
+            const container = document.getElementById('analysisContent');
+            const badge = document.getElementById('badgeStatus');
+            const headerTitle = document.getElementById('activePatternNameHeader');
+            
+            const isGreen = activeCandle.close >= activeCandle.open;
+            headerTitle.innerText = `${activeCandle.name} (${isGreen ? 'Bullish' : 'Bearish'})`;
+
+            badge.innerText = isGreen ? 'Bullish Condition' : 'Bearish Condition';
+            badge.className = isGreen 
+                ? 'px-3 py-1 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                : 'px-3 py-1 text-xs font-semibold rounded-full bg-rose-500/10 text-rose-400 border border-rose-500/30';
+
+            container.innerHTML = `
+                <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-800">
+                    <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">Pattern Summary</div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${activeCandle.description}</p>
+                </div>
+
+                <div class="grid grid-cols-1 gap-3">
+                    <div class="bg-emerald-950/20 border border-emerald-500/30 rounded-xl p-3">
+                        <div class="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+                            <i class="fa-solid fa-circle-check"></i> Pros & Strengths
+                        </div>
+                        <ul class="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+                            ${activeCandle.pros.map(p => `<li>${p}</li>`).join('')}
+                        </ul>
+                    </div>
+
+                    <div class="bg-rose-950/20 border border-rose-500/30 rounded-xl p-3">
+                        <div class="text-xs font-bold text-rose-400 mb-2 flex items-center gap-1.5">
+                            <i class="fa-solid fa-triangle-exclamation"></i> Cons & Weaknesses
+                        </div>
+                        <ul class="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+                            ${activeCandle.cons.map(co => `<li>${co}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-amber-950/20 border border-amber-500/30 rounded-xl p-4">
+                    <div class="text-xs font-bold text-amber-400 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved"></i> Risk Assessment
+                    </div>
+                    <p class="text-xs text-slate-300 leading-relaxed">${activeCandle.risks}</p>
+                </div>
+            `;
+        }
+
+        function updateStats() {
+            const formatVal = (v) => Math.abs(v) < 10 ? '₹' + v.toFixed(2) : '₹' + v.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+            document.getElementById('statOpen').innerText = formatVal(activeCandle.open);
+            document.getElementById('statHigh').innerText = formatVal(activeCandle.high);
+            document.getElementById('statLow').innerText = formatVal(activeCandle.low);
+            document.getElementById('statClose').innerText = formatVal(activeCandle.close);
+        }
+
+        function updateAll() {
+            renderPatternList(candlestickLibrary);
+            updateStats();
+            updateAnalysis();
+            if (chart) {
+                // Fully dynamic scaling based on current high and low values
+                const span = activeCandle.high - activeCandle.low;
+                const padding = span === 0 ? Math.max(1, Math.abs(activeCandle.high) * 0.1) : span * 0.15;
+                
+                chart.options.scales.y.min = activeCandle.low - padding;
+                chart.options.scales.y.max = activeCandle.high + padding;
+                chart.update('none');
+            }
+        }
+
+        // Modal Controls
+        function openEditModal() {
+            document.getElementById('modalOpen').value = activeCandle.open;
+            document.getElementById('modalHigh').value = activeCandle.high;
+            document.getElementById('modalLow').value = activeCandle.low;
+            document.getElementById('modalClose').value = activeCandle.close;
+            document.getElementById('editModal').classList.remove('hidden');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+        }
+
+        function saveModalData(e) {
+            e.preventDefault();
+            const open = parseFloat(document.getElementById('modalOpen').value);
+            const high = parseFloat(document.getElementById('modalHigh').value);
+            const low = parseFloat(document.getElementById('modalLow').value);
+            const close = parseFloat(document.getElementById('modalClose').value);
+
+            if (high < Math.max(open, close) || high < low) {
+                alert('Invalid High price! High must be greater than or equal to Open, Close, and Low.');
+                return;
+            }
+            if (low > Math.min(open, close) || low > high) {
+                alert('Invalid Low price! Low must be less than or equal to Open, Close, and High.');
+                return;
+            }
+
+            activeCandle.open = open;
+            activeCandle.high = high;
+            activeCandle.low = low;
+            activeCandle.close = close;
+
+            evaluateCandleRecognition();
+            closeEditModal();
+            updateAll();
+        }
+
+        window.onload = () => {
+            initApp();
+        };
+    </script>
+</body>
+</html>
